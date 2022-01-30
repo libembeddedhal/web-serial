@@ -79,29 +79,34 @@ let serial_extension = undefined;
 //===================================
 //  Button Click Listeners
 //===================================
-document.querySelector("#connect").addEventListener("click", () =>
-{
-  let device = flags.get("device-select");
-  console.log(device);
-
+document.querySelector("#connect").addEventListener("click", async () => {
   if (device_connected) {
     serial_extension.postMessage({ command: "disconnect" });
+    device_connected = false;
+    $("#connect")
+      .addClass("btn-outline-success")
+      .removeClass("btn-outline-danger")
+      .text("Connect");
     return;
-  } else if (!device) {
-    alert("Invalid serial device selected!");
-    return;
-  }
-
-  serial_extension.postMessage({
-    command: "connect",
-    data: {
-      path: device,
-      settings: {
-        bitrate: parseInt(flags.get("baudrate")),
-        bufferSize: 32768,
-      }
+  } else {
+    try {
+      const port = await navigator.serial.requestPort();
+      const portInfo = await port.getInfo()
+      const filters = [
+        portInfo
+      ];
+      navigator.usb.requestDevice({ filters })
+        .then(usbDevice => {
+          device_connected = true;
+          $("#connect")
+            .removeClass("btn-outline-success")
+            .addClass("btn-outline-danger")
+            .text(`Disconnect from ${usbDevice.productName}`);
+        });
+    } catch (error) {
+      alert("Could not connect to serial device.")
     }
-  });
+  }
 });
 
 document.querySelector("#serial-input").addEventListener("keyup", event =>
@@ -368,7 +373,6 @@ flags.attach("reset-on-connect", "change");
 flags.attach("carriage-return-select", "change");
 flags.attach("newline-select", "change", true);
 flags.attach("dark-theme", "change", false, ApplyDarkTheme, ApplyDarkTheme);
-flags.attach("device-select", "change");
 flags.attach("chrome-app-id", "change");
 flags.bind("command-history", commandHistoryUpdateHandler, []);
 
