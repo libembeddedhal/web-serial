@@ -41,8 +41,6 @@
     <a class="navbar-brand"
       href="#"> Telemetry <span class='supsub'>
         <sup class='superscript'>version 1.4</sup>
-        <sub class="subscript disconnected-text"
-          id="app-connection-indicator"></sub>
       </span>
       <button class="btn btn-outline-warning"
         data-toggle="modal"
@@ -190,44 +188,6 @@
             data-toggle="modal"
             data-target="#not-connected-modal">
             Show Chrome Installation Instructions</button>
-          <button type="button"
-            class="btn btn-default"
-            data-dismiss="modal">Close</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <!-- Chrome App Installation Modal -->
-  <div id="not-connected-modal"
-    class="modal fade"
-    role="dialog">
-    <div class="modal-dialog modal-md">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h4 class="modal-title" id="chrome-app-title">
-            Chrome App Is Not Connected</h4>
-          <button type="button"
-            class="close"
-            data-dismiss="modal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <h4>Telemetry App Installation Steps:</h4>
-          <ol>
-            <li>Create a new tab or window and enter
-              <code>chrome://extensions</code> into your address bar.</li>
-            <li>On the upper right hand corner, enable "Developer Mode".</li>
-            <li>Download the
-              <a href="https://github.com/SJSU-Dev2/Telemetry/raw/master/telemetry-chrome-interface.crx">telemetry-chrome-interface.crx</a> file to your
-              computer. Ignore the download warnings, the file is safe.</li>
-            <li>Drag and drop the <strong>telemetry-chrome-interface.crx</strong> file
-              into the chrome extension page and add it to your list of
-              apps.</li>
-            <li>Done, go back to the
-              <a href="https://SJSU-Dev2.github.io/Telemetry">
-                sjsu-dev2.github.io/Telemetry</a> and refresh the page</li>
-          </ol>
-        </div>
-        <div class="modal-footer">
           <button type="button"
             class="btn btn-default"
             data-dismiss="modal">Close</button>
