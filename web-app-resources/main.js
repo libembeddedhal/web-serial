@@ -382,48 +382,6 @@ function main()
   term.fit();
 
   flags.initialize();
-  let app_id = flags.get("chrome-app-id");
-  console.debug("chrome-app-id = ", app_id);
-
-  if (!app_id) {
-    app_id = CHROME_EXTENSION_ID;
-    console.debug("Using CHROME_EXTENSION_ID:", app_id);
-  }
-  // Check the version of the app, and if a valid response comes back, attempt
-  // to connect to the app.
-  try {
-    chrome.runtime.sendMessage(app_id, "version", (response) =>
-    {
-      if (response && response.version.toString() == APP_VERSION) {
-        serial_extension = chrome.runtime.connect(
-          app_id,
-          { name: GenerateConnectionId() }
-        );
-        let app_connection = document.querySelector("#app-connection-indicator");
-        app_connection.classList.remove("disconnected-text");
-        app_connection.classList.add("connected-text");
-        serial_extension.onMessage.addListener(chromeAppMessageHandler);
-      } else {
-        $("#chrome-app-title").text("Chrome App Out of Date!");
-        $("#not-connected-modal").modal("show");
-        serial_extension = {
-          postMessage: () =>
-          {
-            $("#not-connected-modal").modal("show");
-          }
-        };
-      }
-    });
-  } catch (e) {
-    $("#not-connected-modal").modal("show");
-    $("#chrome-app-title").text("Chrome App Is Not Connected!");
-    serial_extension = {
-      postMessage: () =>
-      {
-        $("#not-connected-modal").modal("show");
-      }
-    };
-  }
 }
 
 $(document).on('click', '.browse', function ()

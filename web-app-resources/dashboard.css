@@ -174,17 +174,6 @@ hr
   margin-bottom: 10px;
 }
 
-.connected-text:after
-{
-  color: lime;
-  content: "chrome app";
-}
-.disconnected-text:after
-{
-  color: red;
-  content: "chrome app";
-}
-
 .clear-btn
 {
   height: calc(2.25rem + 2px);
