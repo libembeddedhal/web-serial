@@ -71,9 +71,10 @@ function generateCommandListHtml(command_list) {
 let serial_extension = undefined;
 
 //===================================
-//  Web Serial Reader
+//  Web Serial
 //===================================
 let reader;
+let port;
 
 function disconnectFromDevice() {
   device_connected = false;
@@ -85,6 +86,10 @@ function disconnectFromDevice() {
     .removeClass("btn-outline-danger")
     .text("Connect");
   $("#baudrate").prop("disabled", false);
+  $("#dtr-control").prop("disabled", true);
+  $("#rts-control").prop("disabled", true);
+  $("#dtr-control").prop("checked", false);
+  $("#rts-control").prop("checked", false);
 }
 
 async function readFromDevice(port) {
@@ -124,7 +129,7 @@ document.querySelector("#connect").addEventListener("click", async () => {
     return;
   } else {
     try {
-      const port = await navigator.serial.requestPort();
+      port = await navigator.serial.requestPort();
       const baudRate = Number($("#baudrate").val());
       await port.open({ baudRate });
       await port.setSignals({ dataTerminalReady: false, requestToSend: false });
@@ -134,6 +139,8 @@ document.querySelector("#connect").addEventListener("click", async () => {
         .addClass("btn-outline-danger")
         .text("Disconnect");
       $("#baudrate").prop("disabled", true);
+      $("#dtr-control").prop("disabled", false);
+      $("#rts-control").prop("disabled", false);
       readFromDevice(port);
     } catch (error) {
       const notFoundText = "NotFoundError: No port selected by the user.";
@@ -143,6 +150,17 @@ document.querySelector("#connect").addEventListener("click", async () => {
       }
     }
   }
+});
+
+
+document.querySelector("#dtr-control").addEventListener("click", async () => {
+  let dataTerminalReady = !!document.querySelector("#dtr-control").checked;
+  await port.setSignals({ dataTerminalReady });
+});
+
+document.querySelector("#rts-control").addEventListener("click", async () => {
+  let requestToSend = !!document.querySelector("#rts-control").checked;
+  await port.setSignals({ requestToSend });
 });
 
 document.querySelector("#serial-input").addEventListener("keyup", event => {
@@ -350,20 +368,6 @@ function chromeAppMessageHandler(response) {
   }
 }
 
-function RtsDtrControlHandler() {
-  console.log("RtsDtrControlHandler");
-  let rts_flag = document.querySelector("#rts-control").checked ? true : false;
-  let dtr_flag = document.querySelector("#dtr-control").checked ? true : false;
-
-  serial_extension.postMessage({
-    command: "control",
-    data: {
-      dtr: dtr_flag,
-      rts: rts_flag
-    }
-  });
-}
-
 function ApplyDarkTheme(dark_theme_active) {
   console.debug("Dark theme: ", dark_theme_active);
   let head = document.querySelector("head");
@@ -388,8 +392,6 @@ function commandHistoryUpdateHandler(command_list) {
 }
 
 flags.attach("baudrate", "change", "38400");
-flags.attach("dtr-control", "change", false, RtsDtrControlHandler);
-flags.attach("rts-control", "change", false, RtsDtrControlHandler);
 flags.attach("reset-on-connect", "change");
 flags.attach("carriage-return-select", "change");
 flags.attach("newline-select", "change", true);
