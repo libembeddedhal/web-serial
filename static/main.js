@@ -1,942 +1,428 @@
-/*
- *    kammce.io - Copyright (C) 2017
- *
- *    This file is part of free software application meant for embedded processors
- *    development and testing. You can use it and/or distribute it as long as this
- *    copyright header remains unmodified.  The code is free for personal, educational,
- *    academic research, and commercial environment use but requires permission
- *    to be used in a commercial product.
- *
- *    THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
- *    OR STATUTORY, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF
- *    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE.
- *    I SHALL NOT, IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR
- *    CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER. THIS SOFTWARE MAY NOT BE
- *    SUBLICENSED WITHOUT PERMISSION.
- *
- *    You can reach the author of this software at:
- *         k a m m c e c o r p @ g m a i l . c o m
- */
-
-//===================================
-//  CONSTANTS
-//===================================
-
-const GRAPHING_OPTIONS = {
-    rangeSelector: {
-        buttons: [{
-            count: 10,
-            type: 'second',
-            text: '10s'
-        }, {
-            count: 20,
-            type: 'second',
-            text: '20s'
-        }, {
-            count: 30,
-            type: 'second',
-            text: '30s'
-        }, {
-            type: 'all',
-            text: 'All'
-        }],
-        inputEnabled: false,
-        selected: 0
-    },
-
-    title: {
-        text: 'Live random data'
-    },
-
-    exporting: {
-        enabled: true
-    },
-
-    series: [{
-        name: 'Random data',
-        data: (function() {
-            // generate first set of data
-            var data = [];
-            var time = (new Date()).getTime();
-            for (var i = -10; i <= 0; i += 1)
-            {
-                data.push([
-                    time + i * 1000,
-                    0
-                ]);
-            }
-            return data;
-        }())
-    }]
-};
-
-const DEFAULT_PERIOD    = 1000;
-const SUCCESS           = "SUCCESS";
-const URL               = window.location.href.replace(/\/$/, "");;
-const DOWN_ARROW        = 38;
-const UP_ARROW          = 40;
-const ENTER_KEY         = 13;
-
 //===================================
 //  GLOBALS
 //===================================
-
-/*** Strings ***/
-var serial              = "";
-var telemetry_raw       = "";
-var past_commands       = "";
-/*** Flags ***/
-var table_init          = false;
-var device_connected    = false;
-var server_connected    = false;
-var graph_update_active = false;
-var telemetry_flag      = false;
-var carriage_return_active = false;
-var darktheme_active    = false;
-var newline_active      = true;
-var scrolled_to_bottom  = true;
-/*** Structures ***/
-var telemetry           = { };
-var graph_options       = { };
-var graphs              = { };
-var command_history     = [ ];
-/*** Timers and Periods ***/
-var serial_period       = DEFAULT_PERIOD;
-var server_period       = DEFAULT_PERIOD;
-var telemetry_period    = DEFAULT_PERIOD;
-var graph_period        = DEFAULT_PERIOD;
-/*** Counters ***/
-var graph_telem_update_ratio = 1;
-var redraw_counter      = 0;
-var history_position    = 0;
-
+let device_connected = false;
+let history_position = 0;
+let command_history = [];
+const decoder = new TextDecoder("utf-8");
+const encoder = new TextEncoder("utf-8");
+const flags = new Flags();
+const change_event = new Event("change");
+const collator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base"
+});
+const APP_VERSION = "0.5";
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 //===================================
-//  Local Cache Functions
-//===================================
-
-//sets localStorage when value is changed
-function setCache(cname, cvalue)
-{
-  localStorage.setItem(cname, JSON.stringify(cvalue));
+//  Parsers & Generator Functions
+function GenerateConnectionId(length) {
+  return Math.random()
+    .toString(36)
+    .slice(2);
+}
+function generateDropDownList(port_info) {
+  if (port_info.length == 0) {
+    return '<option value="-1" selected="selected">No Serial Ports</option>';
+  }
+  // Convert port_info array into an array of serial port paths
+  const paths = port_info.map(port => {
+    return port.path;
+  });
+  // Sort using numeric language sensitive string comparison.
+  // This will result in a list like so:
+  //    ["COM1", "COM2", "COM22", "COM100", "COM120"]
+  //
+  // vs ES6's default string sort which would result in:
+  //
+  //    ["COM1", "COM100", "COM120", "COM2", "COM22"]
+  //
+  paths.sort(collator.compare);
+  console.debug(port_info, paths);
+  var selected = document.querySelector("#device-select").value;
+  let html = "";
+  for (let i = 0; i < paths.length; i++) {
+    html += `
+      <option value="${paths[i]}"
+      ${paths[i] === selected ? 'selected="selected"' : ""}>
+          ${paths[i]}
+      </option>`;
+  }
+  return html;
 }
 
-function checkCache(cname)
-{
-  if (localStorage.getItem(cname) != null)
-  {
-    return true;
+function generateCommandListHtml(command_list) {
+  if (!command_list) {
+    return "";
   }
-  else
-  {
-    return false;
+
+  let html = "";
+  for (let command of command_list) {
+    html += `<option value="${command}" />`;
   }
+  return html;
 }
-
-function getCache(cname)
-{
-  return JSON.parse(localStorage.getItem(cname));
-}
-
-function getCommandCache()
-{
-  if (localStorage.getItem('command_history') != null)
-  {
-    var get_storage = JSON.parse(localStorage.getItem('command_history'));
-    command_history = get_storage;
-    for(var i = 0; i < command_history.length; i++)
-    {
-        past_commands += '<option value="'+command_history[i]+'" />';
-    }
-    document.getElementById('command-history').innerHTML = past_commands;
-    console.info("COMMAND CACHE RETRIEVED");
-  }
-
-  else
-  {
-    command_history = [];
-    console.info("NO COMMAND CACHE");
-  }
-}
-
-window.onbeforeunload = () =>
-{
-  if (command_history.length > 100)
-  {
-    var sliced_history = [];
-    cached_history = command_history.slice(0,99);
-    localStorage.setItem('command_history', JSON.stringify(sliced_history));
-  }
-  else {
-    localStorage.setItem('command_history', JSON.stringify(command_history));
-  }
-};
+//===================================
+//  Connect to Chrome App
+//===================================
+// "fmknhfahjnejmacfdpabmgembcgidplm"
+let serial_extension = undefined;
 
 //===================================
-//  Listeners
+//  Web Serial Reader
 //===================================
+let reader;
 
-$("#refresh").on("click", () =>
-{
-    console.log(`${URL}/list`);
-    $.get(`${URL}/list`, function(data)
-    {
-        var new_list = [];
-        if(data)
-        {
-            try
-            {
-                new_list = JSON.parse(data);
-                console.log(new_list);
-            } catch(e) { }
-            var list_html = generateDropDownList(new_list);
-            $("#device-select").html(list_html);
-        }
-    });
-});
+function disconnectFromDevice() {
+  device_connected = false;
+  if (reader && reader.cancel) {
+    reader.cancel();
+  }
+  $("#connect")
+    .addClass("btn-outline-success")
+    .removeClass("btn-outline-danger")
+    .text("Connect");
+  $("#baudrate").prop("disabled", false);
+}
 
-$("#connect").on("click", () =>
-{
-    if(!device_connected)
-    {
-        var device = $("#device-select").val();
-        console.log(device);
-        if(device == "-1")
-        {
-            alert("Invalid serial device.");
-            /* TODO: should show a model stating that connecting failed */
-            return;
+async function readFromDevice(port) {
+  while (port.readable && device_connected) {
+    reader = port.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          // reader.cancel() has been called.
+          break;
         }
-        $.get(`${URL}/connect?device=${device}`, function(data)
-        {
-            if(data === SUCCESS)
-            {
-                device_connected = true;
-                $("#connect")
-                    .removeClass("btn-outline-success")
-                    .addClass("btn-outline-danger")
-                    .text("Disconnect");
-                $("#serial-baud-select").attr("disabled", "disabled");
-            }
-            else
-            {
-                /* TODO: should show a model stating that connecting failed */
-                alert("Couldn't connect to device.");
-            }
-        });
+        // value is a Uint8Array.
+        let decoded = new TextDecoder().decode(value);
+        decoded = decoded.replace(/\n/g, "\r\n");
+        term.write(decoded);
+      }
+    } catch (error) {
+      disconnectFromDevice();
+      const red = '\x1b[31m';
+      const resetColor = '\x1b[0m';
+      term.write(red + "Exiting serial monitor due to error: " + error + resetColor);
+    } finally {
+      // Allow the serial port to be closed later.
+      reader.releaseLock();
     }
-    else
-    {
-        $.get(`${URL}/disconnect`, function(data)
-        {
-            if(data === SUCCESS)
-            {
-                device_connected = false;
-                table_init = false;
-                telemetry_raw = "\r\n";
-                $("#connect")
-                    .addClass("btn-outline-success")
-                    .removeClass("btn-outline-danger")
-                    .text("Connect");
-                $("#serial-baud-select").removeAttr("disabled");
-            }
-        });
+  }
+  await port.close();
+}
+
+//===================================
+//  Button Click Listeners
+//===================================
+document.querySelector("#connect").addEventListener("click", async () => {
+  if (device_connected) {
+    disconnectFromDevice();
+    return;
+  } else {
+    try {
+      const port = await navigator.serial.requestPort();
+      const baudRate = Number($("#baudrate").val());
+      await port.open({ baudRate });
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      device_connected = true;
+      $("#connect")
+        .removeClass("btn-outline-success")
+        .addClass("btn-outline-danger")
+        .text("Disconnect");
+      $("#baudrate").prop("disabled", true);
+      readFromDevice(port);
+    } catch (error) {
+      const notFoundText = "NotFoundError: No port selected by the user.";
+      const userCancelledConnecting = String(error) === notFoundText;
+      if (!userCancelledConnecting) {
+        alert("Could not connect to serial device.")
+      }
     }
+  }
 });
 
-$("input[name='serial-input']").on('keyup', (e) =>
-{
-        var count_change_flag = true;
-        // console.log(command_history);
-        switch(event.which)
-        {
-            case UP_ARROW:
-                if(history_position > 0)
-                {
-                    history_position--;
-                }
-                break;
-            case DOWN_ARROW:
-                if(history_position < command_history.length)
-                {
-                    history_position++;
-                }
-                break;
-            case ENTER_KEY:
-                $("#serial-send").click();
-            default:
-                count_change_flag = false;
-                break;
-        }
-        if(count_change_flag)
-        {
-            $("input[name='serial-input']").val(command_history[command_history.length-history_position]);
-        }
-});
+document.querySelector("#serial-input").addEventListener("keyup", event => {
+  const DOWN_ARROW = 38;
+  const UP_ARROW = 40;
+  const ENTER_KEY = 13;
 
-$("#serial-send").on("click", () =>
-{
-    if(device_connected)
-    {
-        var payload = $("input[name='serial-input']").val();
-        $("input[name='serial-input']").val("");
+  let count_change_flag = true;
 
-        if(payload !== command_history[command_history.length-1])
-        {
-            command_history.push(payload);
-            past_commands += '<option value="'+command_history[command_history.length - 1]+'" />';
-            document.getElementById('command-history').innerHTML = past_commands;
-        }
-        history_position = 0;
-
-        var cr = (carriage_return_active) ? "1" : "0";
-        var nl = (newline_active) ? "1" : "0";
-
-        $.get(`${URL}/write/${payload}/${cr}/${nl}`, function(data)
-        {
-            if(data === SUCCESS)
-            {
-                console.info("WRITE SUCCESS!");
-            }
-            else
-            {
-                console.info("WRITE FAILURE!");
-            }
-        });
+  switch (event.which) {
+    case UP_ARROW:
+      if (history_position > 0) {
+        history_position--;
+      }
+      break;
+    case DOWN_ARROW:
+      if (history_position < command_history.length) {
+        history_position++;
+      }
+      break;
+    case ENTER_KEY:
+      $("#serial-send").click();
+      break;
+    default:
+      count_change_flag = false;
+      break;
+  }
+  if (count_change_flag) {
+    let command = command_history[command_history.length - history_position];
+    if (command) {
+      document.querySelector("#serial-input").value = command;
     }
+  }
 });
 
-$("#serial-frequency-select").on("change", () =>
-{
-    var val = $("#serial-frequency-select").val();
-    var frequency = parseInt(val);
-    serial_period = (frequency === -1) ? DEFAULT_PERIOD : 1000/frequency;
-    setCache("serial-frequency-select", val);
-});
+document.querySelector("#serial-send").addEventListener("click", () => {
+  let payload = $("#serial-input").val();
+  $("#serial-input").val("");
 
-$("#telemetry-frequency-select").on("change", () =>
-{
-    var val = $("#telemetry-frequency-select").val();
-    var frequency = parseInt(val);
-    telemetry_period = (frequency === -1) ? DEFAULT_PERIOD : 1000/frequency;
-    setCache("telemetry-frequency-select", val);
+  if (payload !== command_history[command_history.length - 1]) {
+    command_history.push(payload);
+  }
 
-    if(telemetry_period > graph_period)
-    {
-        $("#graph-frequency-select").val(val);
-    }
+  history_position = 0;
 
-    $("#graph-frequency-select option").filter(function() {
-        return $(this).attr("value") > $("#telemetry-frequency-select").val();
-    }).attr("disabled", "disabled");
+  let cr = flags.get("carriage-return-select") ? "\r" : "";
+  let nl = flags.get("newline-select") ? "\n" : "";
 
-    $("#graph-frequency-select option").filter(function() {
-        return $(this).attr("value") <= $("#telemetry-frequency-select").val();
-    }).removeAttr("disabled");
-});
+  console.log(`${payload}${cr}${nl}\n\n\n`);
 
-$("#serial-baud-select").on("change", () =>
-{
-    var val = $("#serial-baud-select").val();
-    $.get(`${URL}/baudrate/${val}`, function(data)
-    {
-        if(data === SUCCESS) {}
-    });
-    setCache("serial-baud-select", val);
+  serial_extension.postMessage({
+    command: "write",
+    data: Array.from(encoder.encode(`${payload}${cr}${nl}`))
+  });
 });
 
 //Clear Button Code
-$("#clear-button").on("click", () =>
-{
-    // [0m = Reset color codes
-    // [3J = Remove terminal buffer
-    // [2J = Clear screen
-    // [H  = Return to home (0,0)
-    term.write("\x1b[0m\x1b[3J\x1b[2J\x1b[H");
+document.querySelector("#clear-button").addEventListener("click", () => {
+  // [0m = Reset color codes
+  // [3J = Remove terminal buffer
+  // [2J = Clear screen
+  // [H  = Return to home (0,0)
+  term.write("\x1b[0m\x1b[3J\x1b[2J\x1b[H");
 });
 
 //Command History Code
-$("#clear-cache-modal-open").on("click",() =>
-{
-  $('#clear-cache-modal').modal('show');
+document
+  .querySelector("#clear-cache-modal-open")
+  .addEventListener("click", () => {
+    $("#clear-cache-modal").modal("show");
+  });
+
+document.querySelector("#clear-command-cache").addEventListener("click", () => {
+  flags.set("command-history", [
+    /* empty array */
+  ]);
 });
 
-$("#clear-cache").on("click", () =>
-{
-  command_history = [];
-  past_commands = "";
-  document.getElementById('command-history').innerHTML = "";
-  localStorage.setItem('command_history', JSON.stringify(command_history));
-  console.info("CLEARED COMMAND HISTORY AND CACHE");
+async function asyncPostMessage(payload) {
+  return new Promise(resolve => {
+    serial_extension.postMessage(payload);
+    resolve();
+  });
+}
+
+const progress_bar = document.querySelector("#hyperload-progress");
+
+document.querySelector("#hyperload-button").addEventListener("click", () => {
+  let serial_file = document.querySelector("#hyperload-file").files;
+  if (!device_connected) {
+    alert("Please connect a device before attempting to flash it.");
+    return;
+  } else if (serial_file.length === 0) {
+    alert("Please select a file before attempting to flash the board.");
+    return;
+  }
+
+  document.body.style.cursor = "progress";
+  document.querySelector("#file-upload-modal-button").disabled = true;
+  document.querySelector("#hyperload-browse").disabled = true;
+  document.querySelector("#hyperload-button").disabled = true;
+  document.querySelector("#serial-upload").disabled = true;
+  document.querySelector("#serial-send").disabled = true;
+  document.querySelector("#connect").disabled = true;
+
+  let file = serial_file.item(0);
+  let reader = new FileReader();
+
+  // This event listener will be fired once reader.readAsText() finishes
+  reader.onload = async () => {
+    console.debug(reader);
+    let application_binary = new Uint8Array(reader.result);
+    let success = await Hyperload(asyncPostMessage, application_binary, progress_bar);
+    console.log("Hyperload finished!");
+    if (!success) {
+      alert("Hyperload failed to program board. Please try again!");
+    }
+
+    document.body.style.cursor = "";
+    document.querySelector("#file-upload-modal-button").disabled = false;
+    document.querySelector("#hyperload-browse").disabled = false;
+    document.querySelector("#hyperload-button").disabled = false;
+    document.querySelector("#serial-upload").disabled = false;
+    document.querySelector("#serial-send").disabled = false;
+    document.querySelector("#connect").disabled = false;
+  };
+  // Initiate reading of uploaded file
+  reader.readAsArrayBuffer(file);
 });
 
 //Serial File Upload
-$("#serial-upload").on("click", () =>
-{
-  if (device_connected)
-  {
-    var serial_file = document.getElementById("serial-file").files;
-    if (serial_file.length == 0)
-    {
-      document.getElementById("alert-display").innerHTML = '<p>No file selected</p>';
-      console.info("No file");
-    }
-    else
-    {
-      var output = '';
-      var file = serial_file.item(0);
-      var reader = new FileReader();
-
-      reader.onload = function(e)
-      {
-        output = reader.result;
-        $.ajax({
-          url: `${URL}/serial-file/`,
-          method: "POST",
-          headers: {'Content-Type': 'application/json'},
-          data: JSON.stringify(output),
-          success: function(data)
-          {
-            if (data === SUCCESS)
-            {
-              document.getElementById("alert-display").innerHTML = '<p>File upload success!</p>';
-              console.info("FILE UPLOAD SUCCESS");
-            }
-            else
-            {
-              document.getElementById("alert-display").innerHTML = '<p>File upload failure</p>';
-              console.info("FILE UPLOAD FAILURE");
-            }
-          }
-        })
-      }
-      reader.readAsText(file);
-    }
+document.querySelector("#serial-upload").addEventListener("click", () => {
+  let serial_file = document.querySelector("#serial-file").files;
+  if (!device_connected) {
+    alert("Please connect a device before uploading a file.");
+    return;
+  } else if (serial_file.length === 0) {
+    alert("No file selected");
+    console.debug("No file");
+    return;
   }
 
-  else
-  {
-    document.getElementById("alert-display").innerHTML = '<p>Please connect a device before uploading a file</p>';
-  }
+  let file = serial_file.item(0);
+  let reader = new FileReader();
 
-});
-
-$("#graph-frequency-select").on("change", () =>
-{
-    var val = $("#graph-frequency-select").val();
-    var frequency = parseInt(val);
-    graph_period = (frequency === -1) ? DEFAULT_PERIOD : 1000/frequency;
-    setCache("graph-frequency-select", val);
-});
-
-$('#rts-control').on('change click', function(e)
-{
-    var rts_flag = $(this).is(":checked");
-    $.get(`${URL}/rts/${rts_flag}`, function(data)
-    {
-        if(data === SUCCESS) {}
+  // This event listener will be fired once reader.readAsText() finishes
+  reader.onload = () => {
+    serial_extension.postMessage({
+      command: "write",
+      data: Array.from(reader.result)
     });
+  };
+  // Initiate reading of uploaded file
+  reader.readAsArrayBuffer(file);
 });
-
-$('#dtr-control').on('change click', function(e)
-{
-    var dtr_flag = $(this).is(":checked");
-    $.get(`${URL}/dtr/${dtr_flag}`, function(data)
-    {
-        if(data === SUCCESS) {}
-    });
-});
-
-$('#telemetry-on').on('change click', function(e)
-{
-    telemetry_flag = $(this).is(":checked");
-    setCache("telemetry-on", telemetry_flag);
-
-    var telemetry_feedback_section = $("#telemetry-feedback-section");
-    var serial_output_section = $("#serial-output-section");
-    var invisible_block = $('#invisible-layer');
-    const serial_output_expand = "col-sm-12 col-md-12 col-lg-12";
-    const invisible_layer_expand = "col-sm-12 col-md-12 col-lg-11";
-    const serial_output_shrink = "col-sm-12 col-md-12 col-lg-5";
-    const telemetry_feedback_size = "col-sm-12 col-md-12 col-lg-7";
-    const REFIT_TIME_DELAY = 541;
-
-    if(e.type == 'change'){
-        if(!telemetry_flag)
-        {
-            serial_output_section.removeClass(serial_output_shrink).addClass(serial_output_expand);
-            invisible_block.removeClass(serial_output_shrink).addClass(invisible_layer_expand);
-            telemetry_feedback_section.removeClass(telemetry_feedback_size).addClass('col-lg-1');
-        }
-        else
-        {
-           telemetry_feedback_section.find("input").attr("required", true);
-           serial_output_section.removeClass(serial_output_expand).addClass(serial_output_shrink);
-           invisible_block.removeClass(invisible_layer_expand).addClass(serial_output_shrink);
-           telemetry_feedback_section.css('visibility', 'visible').removeClass("col-lg-1").addClass(telemetry_feedback_size);
-        }
-        setTimeout(function(){
-            term.fit();
-        }, REFIT_TIME_DELAY);
-    }
-    else if(e.type = 'click')
-    {
-        if(!telemetry_flag)
-        {
-           serial_output_section.css('transition', '0.52s ease-in');
-            invisible_block.css('transition', '0.5s ease-in');
-            telemetry_feedback_section.css('transition', '0.5s ease-in').hide(540);
-        }
-        else
-        {
-           serial_output_section.css('transition', '0.449s ease-in');
-           invisible_block.css('transition', '0.5s ease-in');
-           telemetry_feedback_section.show().css('transition', '0.5s ease-in');
-        }
-    }
-});
-
-$('#reset-on-connect').on('change', function()
-{
-    reset_on_connect_flag = $(this).is(":checked");
-    setCache("reset-on-connect", reset_on_connect_flag);
-});
-
-$('#graph-switch').on('change', function()
-{
-    graph_update_active = $(this).is(":checked");
-    setCache("graph-switch", graph_update_active);
-});
-
-$('#carriage-return-select').on('change', function()
-{
-    carriage_return_active = $(this).is(":checked");
-    setCache("carriage-return-active", carriage_return_active);
-});
-
-$('#newline-select').on('change', function()
-{
-    newline_active = $(this).is(":checked");
-    setCache("newline-active", newline_active);
-});
-
-$("#dark-theme").on('change', function()
-{
-    darktheme_active = $(this).is(":checked");
-    setCache("darktheme-active", darktheme_active);
-    if(darktheme_active){
-        $('head').append('<link rel="stylesheet" type="text/css" id="dark-style" href="static/lib/themes/dark-theme.css" >');
-    }else{
-        var item = document.getElementById("dark-style");
-        item.parentNode.removeChild(item);
-    }
-});
-
-//===================================
-//  Parsers & Generator Functions
-//===================================
-
-function telemetrySet(bucket, element)
-{
-    var new_value = $(`input[name="set-${bucket}-${element}"]`).val();
-    $.get(`${URL}/set/${bucket}/${element}/${new_value}`, function(data)
-    {
-        if(data === SUCCESS) {}
-    });
-}
-
-function parseTelemetry()
-{
-    var json = { };
-
-
-    if(telemetry_raw.indexOf("START:") == -1)
-    {
-        json = false;
-    }
-    else
-    {
-        var buckets = telemetry_raw.split("START:");
-        for(bucket of buckets)
-        {
-            components = bucket.split("\n");
-            var current_bucket = components[0].split(":")[0];
-            json[current_bucket] = { };
-
-            for(component of components)
-            {
-                sections = component.split(":");
-                switch(sections.length)
-                {
-                    case 0:
-                        break;
-                    case 2:
-                        break;
-                    case 6:
-                        json[current_bucket][sections[0]] = {
-                            type: sections[4],
-                            value: sections[5]
-                        };
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-    }
-    return json;
-}
-
-function generateDropDownList(new_list)
-{
-    var html = `<option value="-1">Select Serial Device ...</option>`;
-    for(var i = 0; i < new_list.length; i++)
-    {
-        html += `
-            <option
-                value="${new_list[i]}"
-                ${(i === 0) ? "selected" : ""}>
-                ${new_list[i]}
-            </option>`;
-    }
-    return html;
-}
-
-function generateTable()
-{
-    var html = "";
-
-    for(bucket in telemetry)
-    {
-        for(element in telemetry[bucket])
-        {
-            html += `
-            <tr id="${bucket}-${element}">
-                <td>${bucket}</td>
-                <td>${element}</td>
-                <td>${telemetry[bucket][element]["type"]}</td>
-                <td>${telemetry[bucket][element]["value"]}</td>
-                <td>
-                    <input class="form-control" size="1" type="text" name="set-${bucket}-${element}"/>
-                </td>
-                <td>
-                     <button
-                        class="btn btn-outline-success my-2 my-sm-0"
-                        id="set-${bucket}-${element}-btn"
-                        type="submit"
-                        onclick="telemetrySet('${bucket}', '${element}')">Set</button>
-                </td>
-            </tr>`;
-        }
-    }
-    return html;
-}
-
-function generateGraph()
-{
-    var html = "";
-    graph_options = { };
-
-    for(bucket in telemetry)
-    {
-        for(element in telemetry[bucket])
-        {
-            title = `${bucket}-${element}`;
-            html += `
-            <div class="col-lg-4">
-                <div id="graph-${title}" style="height: 300px;"></div>
-            </div>`;
-            var struct = {};
-            jQuery.extend(true, struct, GRAPHING_OPTIONS);
-            struct.title.text = title;
-            struct.series[0].name = element;
-            graph_options[`graph-${title}`] = struct;
-        }
-    }
-    return html;
-}
-
-function intializeGraphs()
-{
-    graph = { };
-    for(graph in graph_options)
-    {
-        graphs[graph] = Highcharts.stockChart(graph, graph_options[graph])
-    }
-}
-
-function updateTable()
-{
-    for(bucket in telemetry)
-    {
-        for(element in telemetry[bucket])
-        {
-            var select = `#${bucket}-${element} td`;
-            var cell = $(select)[3];
-            $(cell).html(telemetry[bucket][element]["value"]);
-        }
-    }
-}
-
-function updateGraph()
-{
-    for(bucket in telemetry)
-    {
-        for(element in telemetry[bucket])
-        {
-            var select = `graph-${bucket}-${element}`;
-            var x = (new Date()).getTime();
-            var y = parseFloat(telemetry[bucket][element]["value"]);
-            try
-            {
-                graphs[select].series[0].addPoint([x, y], false, false);
-            }
-            catch(e)
-            {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-//===================================
-//  Timer Functions
-//===================================
-
-function getTelemetry()
-{
-    if(device_connected && server_connected && telemetry_flag)
-    {
-        $.get(`${URL}/telemetry`, function (data)
-        {
-            console.log(data);
-            if(data === "\r\n" || data === "")
-            {
-                console.log("rejecting");
-                return;
-            }
-            graph_telem_update_ratio = (graph_period / telemetry_period);
-            if(data !== telemetry_raw)
-            {
-                telemetry_raw = data;
-                $("#telemetry-raw").val(data);
-                var temp = parseTelemetry(data);
-                if(temp != false)
-                {
-                    telemetry = temp;
-                }
-                else
-                {
-                    return;
-                }
-                if(!table_init)
-                {
-                    console.log("Initialize telemetry feedback", telemetry, telemetry_raw);
-                    var table_html = generateTable(telemetry);
-                    $("#telemetry-table tbody").html(table_html);
-                    var graph_html = generateGraph(telemetry);
-                    $("#graph-holder").html(graph_html);
-                    intializeGraphs();
-                    table_init = true;
-                }
-                else
-                {
-                    updateTable();
-                    if(graph_update_active)
-                    {
-                        updateGraph();
-                        if(redraw_counter >= graph_telem_update_ratio)
-                        {
-                            for(graph in graphs)
-                            {
-                                graphs[graph].redraw();
-                            }
-                            redraw_counter = 0;
-                        }
-                        redraw_counter++;
-                    }
-                }
-            }
-        });
-    }
-    setTimeout(getTelemetry, telemetry_period);
-}
-
-function getSerial()
-{
-    if(device_connected && server_connected)
-    {
-        $.ajax({
-            url: `${URL}/serial`,
-            type: 'GET',
-            success: (data) =>
-            {
-                if(data !== serial)
-                {
-                    serial = data;
-                    data = data.replace(/\n/g, '\r\n');
-                    term.write(data);
-                }
-            },
-            error: () =>
-            {
-                console.log("400 error!");
-                device_connected = false;
-
-                $("#connect")
-                    .addClass("btn-outline-success")
-                    .removeClass("btn-outline-danger")
-                    .text("Connect");
-
-                $("#refresh").click();
-
-                $('#serial-disconnect-modal').modal('show');
-            }
-        });
-    }
-    setTimeout(getSerial, serial_period);
-}
-
-function checkConnection()
-{
-    $.ajax({
-        url: `${URL}/server-is-alive`,
-        type: 'GET',
-        success: () =>
-        {
-            server_connected = true;
-            $("#server-connection-indicator").removeClass("disconnected-text").addClass("connected-text");
-            setTimeout(checkConnection, server_period);
-        },
-        error: () =>
-        {
-            server_connected = false;
-            $("#server-connection-indicator").removeClass("connected-text").addClass("disconnected-text");
-            $('#server-disconnect-modal').modal('show');
-        }
-    });
-}
 
 //===================================
 //  Initialize everything
 //===================================
+function chromeAppMessageHandler(response) {
+  switch (response.responder) {
+    case "list":
+      const list_html = generateDropDownList(response.data);
+      document.querySelector("#device-select").innerHTML = list_html;
+      document.querySelector("#device-select").dispatchEvent(change_event);
+      break;
+    case "connect":
+      device_connected = true;
+      $("#connect")
+        .removeClass("btn-outline-success")
+        .addClass("btn-outline-danger")
+        .text("Disconnect");
+      document.querySelector("#baudrate").setAttribute("disabled", "disabled");
+      document
+        .querySelector("#device-select")
+        .setAttribute("disabled", "disabled");
+      break;
+    case "disconnect":
+      // TODO(kammce): Actually evaluate that the device has connected properly
+      device_connected = false;
+      table_init = false;
+      telemetry_raw = "\r\n";
+      $("#connect")
+        .addClass("btn-outline-success")
+        .removeClass("btn-outline-danger")
+        .text("Connect");
+      document.querySelector("#baudrate").removeAttribute("disabled");
+      document.querySelector("#device-select").removeAttribute("disabled");
+      $("#refresh").click();
+      break;
+    case "update":
+      break;
+    case "read":
+      let str = decoder.decode(new Uint8Array(response.data).buffer);
+      if (hyperload_activated) {
+        serial_controller.feed(response.data);
+      } else {
+        str = str.replace(/\n/g, "\r\n");
+        term.write(str);
+      }
+      break;
+    default:
+      console.warn("Unknown response", response);
+      break;
+  }
+}
 
-Terminal.applyAddon(fit);
+function RtsDtrControlHandler() {
+  console.log("RtsDtrControlHandler");
+  let rts_flag = document.querySelector("#rts-control").checked ? true : false;
+  let dtr_flag = document.querySelector("#dtr-control").checked ? true : false;
 
-var term = new Terminal({
-    // bellSound: "both",
-    // bellStyle: "sound",
-    cursorBlink: true,
-    lineHeight: 1,
-    fontFamily: "monospace",
-    scrollback: 1024,
-});
-
-$(window).resize(() => {
-    term.fit();
-});
-
-term.on('key', function (key, ev) {
-    if(ev.code == "Backspace")
-    {
-        key = "\b";
+  serial_extension.postMessage({
+    command: "control",
+    data: {
+      dtr: dtr_flag,
+      rts: rts_flag
     }
-    if(key == "\r")
-    {
-        key += "\n";
+  });
+}
+
+function ApplyDarkTheme(dark_theme_active) {
+  console.debug("Dark theme: ", dark_theme_active);
+  let head = document.querySelector("head");
+  if (dark_theme_active) {
+    head.innerHTML += `<link
+      rel="stylesheet"
+      type="text/css"
+      id="dark-style"
+      href="static/lib/themes/dark-theme.css">`;
+  } else {
+    let dark_style = document.querySelector("#dark-style");
+    if (dark_style) {
+      head.removeChild(dark_style);
     }
-    $.get(`${URL}/write/${encodeURIComponent(key)}/0/0`, function(data)
-    {
-        if(data === SUCCESS)
-        {
-            console.info("WRITE SUCCESS!");
-        }
-        else
-        {
-            console.info("WRITE FAILURE!");
-        }
-    });
+  }
+}
+
+function commandHistoryUpdateHandler(command_list) {
+  let command_history_element = document.querySelector("#command-history");
+  command_history_element.innerHTML = generateCommandListHtml(command_list);
+  console.debug("Command history updated");
+}
+
+flags.attach("baudrate", "change", "38400");
+flags.attach("dtr-control", "change", false, RtsDtrControlHandler);
+flags.attach("rts-control", "change", false, RtsDtrControlHandler);
+flags.attach("reset-on-connect", "change");
+flags.attach("carriage-return-select", "change");
+flags.attach("newline-select", "change", true);
+flags.attach("dark-theme", "change", false, ApplyDarkTheme, ApplyDarkTheme);
+flags.attach("chrome-app-id", "change");
+flags.bind("command-history", commandHistoryUpdateHandler, []);
+
+function main() {
+  term.open(document.querySelector("#terminal"));
+  term.fit();
+
+  flags.initialize();
+}
+
+$(document).on('click', '.browse', function () {
+  var file = $(this).parent().parent().parent().find('.file');
+  file.trigger('click');
+});
+$(document).on('change', '.file', function () {
+  $(this).parent().find('.form-control')
+    .val($(this).val().replace(/C:\\fakepath\\/i, ''));
 });
 
-term.on('linefeed', function (key, ev) {
-    console.log("linefeed!");
-});
-
-term.on('data', function (data, ev) {
-    console.log(data);
-});
-
-window.onload = function()
-{
-    setTimeout(function()
-    {
-        term.open(document.querySelector('#terminal'));
-        term.fit();
-        checkConnection();
-        getSerial();
-        getTelemetry();
-        getCommandCache();
-        $("#refresh").click();
-
-        $("#telemetry-feedback-section").css('display', '');
-        //// TODO: Convert the items below into a for loop
-        if(checkCache('telemetry-on'))
-        {
-            $("#telemetry-on").prop("checked", getCache("telemetry-on") === true);
-            $("#telemetry-on").change();
-            if(!telemetry_flag)
-            {
-                $("#telemetry-feedback-section").css('visibility', 'hidden');
-            }
-            else
-            {
-                $("#telemetry-feedback-section").css('visibility', 'visible');
-            }
-        }
-        if(checkCache("reset-on-connect"))
-        {
-            $("#reset-on-connect").prop("checked", getCache("reset-on-connect") === true);
-            $("#reset-on-connect").change();
-        }
-        if(checkCache("carriage-return-active"))
-        {
-            $("#carriage-return-select").prop("checked", getCache("carriage-return-active") === true);
-            $("#carriage-return-select").change();
-        }
-        if(checkCache("newline-active"))
-        {
-            $("#newline-select").prop("checked", getCache("newline-active") === true);
-            $("#newline-select").change();
-        }
-        if(checkCache("darktheme-active"))
-        {
-            $("#dark-theme").prop("checked", getCache("darktheme-active") === true);
-            $("#dark-theme").change();
-        }
-        if(checkCache("serial-frequency-select"))
-        {
-            $("#serial-frequency-select").val(getCache("serial-frequency-select"));
-            $("#serial-frequency-select").change();
-        }
-        if(checkCache("telemetry-frequency-select"))
-        {
-            $("#telemetry-frequency-select").val(getCache("telemetry-frequency-select"));
-            $("#telemetry-frequency-select").change();
-        }
-        if(checkCache("graph-switch"))
-        {
-            $("#graph-switch").prop("checked", getCache("graph-switch") === true);
-            $("#graph-switch").change();
-        }
-        if(checkCache("graph-frequency-select"))
-        {
-            $("#graph-frequency-select").val(getCache("graph-frequency-select"));
-            $("#graph-frequency-select").change();
-        }
-        if(checkCache("serial-baud-select"))
-        {
-            $("#serial-baud-select").val(getCache("serial-baud-select"));
-            $("#serial-baud-select").change();
-        }
-    }, 100);
+window.onbeforeunload = () => {
+  let command_history = flags.get("command-history");
+  if (command_history) {
+    flags.set("command-history", command_history.slice(0, 99));
+  }
+  flags.teardown();
+  return null;
 };
+window.addEventListener("resize", () => {
+  term.fit();
+});
+// Entry point of software start
+window.addEventListener("load", main);
