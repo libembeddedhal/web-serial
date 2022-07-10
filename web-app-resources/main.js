@@ -77,34 +77,76 @@ function generateCommandListHtml(command_list)
 let serial_extension = undefined;
 
 //===================================
+//  Web Serial Reader
+//===================================
+let reader;
+
+function disconnectFromDevice() {
+  device_connected = false;
+  if (reader && reader.cancel) {
+    reader.cancel();
+  }
+  $("#connect")
+    .addClass("btn-outline-success")
+    .removeClass("btn-outline-danger")
+    .text("Connect");
+  $("#baudrate").prop("disabled", false);
+}
+
+async function readFromDevice(port) {
+  while (port.readable && device_connected) {
+    reader = port.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          // reader.cancel() has been called.
+          break;
+        }
+        // value is a Uint8Array.
+        let decoded = new TextDecoder().decode(value);
+        decoded = decoded.replace(/\n/g, "\r\n");
+        term.write(decoded);
+      }
+    } catch (error) {
+      disconnectFromDevice();
+      const red = '\x1b[31m';
+      const resetColor = '\x1b[0m';
+      term.write(red + "Exiting serial monitor due to error: " + error + resetColor);
+    } finally {
+      // Allow the serial port to be closed later.
+      reader.releaseLock();
+    }
+  }
+  await port.close();
+}
+  
+//===================================
 //  Button Click Listeners
 //===================================
 document.querySelector("#connect").addEventListener("click", async () => {
   if (device_connected) {
-    serial_extension.postMessage({ command: "disconnect" });
-    device_connected = false;
-    $("#connect")
-      .addClass("btn-outline-success")
-      .removeClass("btn-outline-danger")
-      .text("Connect");
+    disconnectFromDevice();
     return;
   } else {
     try {
       const port = await navigator.serial.requestPort();
-      const portInfo = await port.getInfo()
-      const filters = [
-        portInfo
-      ];
-      navigator.usb.requestDevice({ filters })
-        .then(usbDevice => {
-          device_connected = true;
-          $("#connect")
-            .removeClass("btn-outline-success")
-            .addClass("btn-outline-danger")
-            .text(`Disconnect from ${usbDevice.productName}`);
-        });
+      const baudRate = Number($("#baudrate").val());
+      await port.open({ baudRate });
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      device_connected = true;
+      $("#connect")
+        .removeClass("btn-outline-success")
+        .addClass("btn-outline-danger")
+        .text("Disconnect");
+      $("#baudrate").prop("disabled", true);
+      readFromDevice(port);
     } catch (error) {
-      alert("Could not connect to serial device.")
+      const notFoundText = "NotFoundError: No port selected by the user.";
+      const userCancelledConnecting = String(error) === notFoundText;
+      if (!userCancelledConnecting) {
+        alert("Could not connect to serial device.")
+      }
     }
   }
 });
