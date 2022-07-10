@@ -1,23 +1,3 @@
-/*
- *    kammce.io - Copyright (C) 2017
- *
- *    This file is part of free software application meant for embedded processors
- *    development and testing. You can use it and/or distribute it as long as this
- *    copyright header remains unmodified.  The code is free for personal, educational,
- *    academic research, and commercial environment use but requires permission
- *    to be used in a commercial product.
- *
- *    THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
- *    OR STATUTORY, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF
- *    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE.
- *    I SHALL NOT, IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR
- *    CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER. THIS SOFTWARE MAY NOT BE
- *    SUBLICENSED WITHOUT PERMISSION.
- *
- *    You can reach the author of this software at:
- *         k a m m c e c o r p @ g m a i l . c o m
- */
-
 Highcharts.setOptions(
 {
     plotOptions:
@@ -352,3 +332,51 @@ Highcharts.setOptions(
         enabled: false
     }
 });
+
+const GRAPHING_OPTIONS = {
+  rangeSelector: {
+    buttons: [{
+      count: 10,
+      type: 'second',
+      text: '10s'
+    }, {
+      count: 20,
+      type: 'second',
+      text: '20s'
+    }, {
+      count: 30,
+      type: 'second',
+      text: '30s'
+    }, {
+      type: 'all',
+      text: 'All'
+    }],
+    inputEnabled: false,
+    selected: 0
+  },
+
+  title: {
+    text: 'Live random data'
+  },
+
+  exporting: {
+    enabled: true
+  },
+
+  series: [{
+    name: 'Random data',
+    data: (function() {
+      // generate first set of data
+      let data = [];
+      let time = (new Date()).getTime();
+      for (let i = -10; i <= 0; i += 1)
+      {
+        data.push([
+          time + i * 1000,
+          0
+        ]);
+      }
+      return data;
+    }())
+  }]
+};

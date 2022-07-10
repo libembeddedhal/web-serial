@@ -21,6 +21,65 @@ h1 {
   border-bottom: 1px solid #eee;
 }
 
+progress {
+  /* Positioning */
+  position: fixed;
+  left: 0;
+  top: 0;
+
+  /* Dimensions */
+  width: 100%;
+  height: 1px;
+
+  /* Reset the appearance */
+  -webkit-appearance: none;
+     -moz-appearance: none;
+          appearance: none;
+
+  /* Get rid of the default border in Firefox/Opera. */
+  border: none;
+
+  /* Progress bar container for Firefox/IE10+ */
+  background-color: transparent;
+
+  /* Progress bar value for IE10+ */
+  color: lime;
+  z-index: 1050;
+
+  -webkit-transition : .5s ease;
+  -moz-transition : .5s ease;
+    -o-transition : .5s ease;
+       transition : .5s ease;
+}
+
+progress::-webkit-progress-bar {
+  background-color: transparent;
+}
+
+progress::-webkit-progress-value {
+  -webkit-transition : .5s ease;
+  -moz-transition : .5s ease;
+    -o-transition : .5s ease;
+      transition : .5s ease;
+}
+
+.progress-red::-webkit-progress-value {
+  background-color: red;
+}
+
+.progress-yellow::-webkit-progress-value {
+  background-color: yellow;
+}
+
+.progress-lime::-webkit-progress-value {
+  background-color: lime;
+}
+
+.file {
+  visibility: hidden;
+  position: absolute;
+}
+
 /*
  * Sidebar
  */
@@ -96,7 +155,7 @@ textarea {
   flex-direction: row;
 }
 
-main 
+main
 {
   height: 100%;
   display: flex;
@@ -115,60 +174,32 @@ hr
   margin-bottom: 10px;
 }
 
-.connected-text:after
-{
-  color: lime;
-  content: "server connected";
-}
-.disconnected-text:after
-{
-  color: red;
-  content: "server disconnected";
-}
-
 .clear-btn
 {
   height: calc(2.25rem + 2px);
 }
 
-.modal-lg 
+.modal-lg
 {
   max-width: 80%;
 }
 
-.help-btn { 
-  color: #ffe817; 
-  border-color: #ffe817; 
-  background-color: #292b2c;
-} 
- 
-.help-btn:hover, 
-.help-btn:focus,  
-.help-btn.active
-{ 
-  outline: none !important;
-  box-shadow: none;
-  color: #000000; 
-  background-color: #ffe817; 
-  border-color: #ffe817; 
-} 
- 
 .options-btn{
-  color: #cacaca; 
-  border-color: #cacaca; 
+  color: #cacaca;
+  border-color: #cacaca;
   background-color: #292b2c;
 }
 
-.options-btn:hover, 
-.options-btn:focus,  
+.options-btn:hover,
+.options-btn:focus,
 .options-btn.active
-{ 
+{
   outline: none !important;
   box-shadow: none;
-  color: #000000; 
-  background-color: #cacaca; 
-  border-color: #cacaca; 
-} 
+  color: #000000;
+  background-color: #cacaca;
+  border-color: #cacaca;
+}
 
 .supsub {position: absolute}
 .subscript {display:block; position:relative; left:5px; top: 23px}
