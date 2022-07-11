@@ -12,7 +12,7 @@ const collator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base"
 });
-const APP_VERSION = "0.5";
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -64,11 +64,6 @@ function generateCommandListHtml(command_list) {
   }
   return html;
 }
-//===================================
-//  Connect to Chrome App
-//===================================
-// "fmknhfahjnejmacfdpabmgembcgidplm"
-let serial_extension = undefined;
 
 //===================================
 //  Web Serial
@@ -210,11 +205,6 @@ document.querySelector("#serial-send").addEventListener("click", () => {
   let nl = flags.get("newline-select") ? "\n" : "";
 
   console.log(`${payload}${cr}${nl}\n\n\n`);
-
-  serial_extension.postMessage({
-    command: "write",
-    data: Array.from(encoder.encode(`${payload}${cr}${nl}`))
-  });
 });
 
 //Clear Button Code
@@ -239,58 +229,6 @@ document.querySelector("#clear-command-cache").addEventListener("click", () => {
   ]);
 });
 
-async function asyncPostMessage(payload) {
-  return new Promise(resolve => {
-    serial_extension.postMessage(payload);
-    resolve();
-  });
-}
-
-const progress_bar = document.querySelector("#hyperload-progress");
-
-document.querySelector("#hyperload-button").addEventListener("click", () => {
-  let serial_file = document.querySelector("#hyperload-file").files;
-  if (!device_connected) {
-    alert("Please connect a device before attempting to flash it.");
-    return;
-  } else if (serial_file.length === 0) {
-    alert("Please select a file before attempting to flash the board.");
-    return;
-  }
-
-  document.body.style.cursor = "progress";
-  document.querySelector("#file-upload-modal-button").disabled = true;
-  document.querySelector("#hyperload-browse").disabled = true;
-  document.querySelector("#hyperload-button").disabled = true;
-  document.querySelector("#serial-upload").disabled = true;
-  document.querySelector("#serial-send").disabled = true;
-  document.querySelector("#connect").disabled = true;
-
-  let file = serial_file.item(0);
-  let reader = new FileReader();
-
-  // This event listener will be fired once reader.readAsText() finishes
-  reader.onload = async () => {
-    console.debug(reader);
-    let application_binary = new Uint8Array(reader.result);
-    let success = await Hyperload(asyncPostMessage, application_binary, progress_bar);
-    console.log("Hyperload finished!");
-    if (!success) {
-      alert("Hyperload failed to program board. Please try again!");
-    }
-
-    document.body.style.cursor = "";
-    document.querySelector("#file-upload-modal-button").disabled = false;
-    document.querySelector("#hyperload-browse").disabled = false;
-    document.querySelector("#hyperload-button").disabled = false;
-    document.querySelector("#serial-upload").disabled = false;
-    document.querySelector("#serial-send").disabled = false;
-    document.querySelector("#connect").disabled = false;
-  };
-  // Initiate reading of uploaded file
-  reader.readAsArrayBuffer(file);
-});
-
 //Serial File Upload
 document.querySelector("#serial-upload").addEventListener("click", () => {
   let serial_file = document.querySelector("#serial-file").files;
@@ -308,10 +246,8 @@ document.querySelector("#serial-upload").addEventListener("click", () => {
 
   // This event listener will be fired once reader.readAsText() finishes
   reader.onload = () => {
-    serial_extension.postMessage({
-      command: "write",
-      data: Array.from(reader.result)
-    });
+    // TODO: Use web serial here
+    // Array.from(reader.result)
   };
   // Initiate reading of uploaded file
   reader.readAsArrayBuffer(file);
@@ -320,53 +256,6 @@ document.querySelector("#serial-upload").addEventListener("click", () => {
 //===================================
 //  Initialize everything
 //===================================
-function chromeAppMessageHandler(response) {
-  switch (response.responder) {
-    case "list":
-      const list_html = generateDropDownList(response.data);
-      document.querySelector("#device-select").innerHTML = list_html;
-      document.querySelector("#device-select").dispatchEvent(change_event);
-      break;
-    case "connect":
-      device_connected = true;
-      $("#connect")
-        .removeClass("btn-outline-success")
-        .addClass("btn-outline-danger")
-        .text("Disconnect");
-      document.querySelector("#baudrate").setAttribute("disabled", "disabled");
-      document
-        .querySelector("#device-select")
-        .setAttribute("disabled", "disabled");
-      break;
-    case "disconnect":
-      // TODO(kammce): Actually evaluate that the device has connected properly
-      device_connected = false;
-      table_init = false;
-      telemetry_raw = "\r\n";
-      $("#connect")
-        .addClass("btn-outline-success")
-        .removeClass("btn-outline-danger")
-        .text("Connect");
-      document.querySelector("#baudrate").removeAttribute("disabled");
-      document.querySelector("#device-select").removeAttribute("disabled");
-      $("#refresh").click();
-      break;
-    case "update":
-      break;
-    case "read":
-      let str = decoder.decode(new Uint8Array(response.data).buffer);
-      if (hyperload_activated) {
-        serial_controller.feed(response.data);
-      } else {
-        str = str.replace(/\n/g, "\r\n");
-        term.write(str);
-      }
-      break;
-    default:
-      console.warn("Unknown response", response);
-      break;
-  }
-}
 
 function ApplyDarkTheme(dark_theme_active) {
   console.debug("Dark theme: ", dark_theme_active);
@@ -396,7 +285,6 @@ flags.attach("reset-on-connect", "change");
 flags.attach("carriage-return-select", "change");
 flags.attach("newline-select", "change", true);
 flags.attach("dark-theme", "change", false, ApplyDarkTheme, ApplyDarkTheme);
-flags.attach("chrome-app-id", "change");
 flags.bind("command-history", commandHistoryUpdateHandler, []);
 
 function main() {
