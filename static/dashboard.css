@@ -2,13 +2,12 @@
  * Base structure
  */
 
-/* Move down content because we have a fixed navbar that is 50px tall */
+
+html,
 body {
-  padding-top: 50px;
-}
-html, body {
   height: 100%;
-  /*overflow-y: hidden;*/
+  padding-top: 2%;
+  font-family: "Andale Mono", 'Courier New', Courier, monospace !important;
 }
 
 /*
@@ -19,6 +18,15 @@ h1 {
   margin-bottom: 20px;
   padding-bottom: 9px;
   border-bottom: 1px solid #eee;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: "Andale Mono", 'Courier New', Courier, monospace !important;
+  letter-spacing: -0.1rem !important;
 }
 
 progress {
@@ -33,8 +41,8 @@ progress {
 
   /* Reset the appearance */
   -webkit-appearance: none;
-     -moz-appearance: none;
-          appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 
   /* Get rid of the default border in Firefox/Opera. */
   border: none;
@@ -46,10 +54,10 @@ progress {
   color: lime;
   z-index: 1050;
 
-  -webkit-transition : .5s ease;
-  -moz-transition : .5s ease;
-    -o-transition : .5s ease;
-       transition : .5s ease;
+  -webkit-transition: .5s ease;
+  -moz-transition: .5s ease;
+  -o-transition: .5s ease;
+  transition: .5s ease;
 }
 
 progress::-webkit-progress-bar {
@@ -57,10 +65,10 @@ progress::-webkit-progress-bar {
 }
 
 progress::-webkit-progress-value {
-  -webkit-transition : .5s ease;
-  -moz-transition : .5s ease;
-    -o-transition : .5s ease;
-      transition : .5s ease;
+  -webkit-transition: .5s ease;
+  -moz-transition: .5s ease;
+  -o-transition: .5s ease;
+  transition: .5s ease;
 }
 
 .progress-red::-webkit-progress-value {
@@ -92,7 +100,8 @@ progress::-webkit-progress-value {
   z-index: 1000;
   padding: 20px;
   overflow-x: hidden;
-  overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
+  overflow-y: auto;
+  /* Scrollable contents if viewport is shorter than content. */
   border-right: 1px solid #eee;
 }
 
@@ -110,7 +119,7 @@ progress::-webkit-progress-value {
   width: 100%;
 }
 
-.sidebar .nav-item + .nav-item {
+.sidebar .nav-item+.nav-item {
   margin-left: 0;
 }
 
@@ -121,8 +130,12 @@ progress::-webkit-progress-value {
 /*
  * Dashboard
  */
+.title {
+  font-family: "Andale Mono", courier-new, courier, monospace;
+  color: lime !important;
+}
 
- /* Placeholders */
+/* Placeholders */
 .placeholders {
   padding-bottom: 3rem;
 }
@@ -132,13 +145,12 @@ progress::-webkit-progress-value {
   padding-bottom: 1.5rem;
 }
 
-.table th
-{
+.table th {
   border-top: none;
 }
 
 textarea {
-  font-family: monospace;
+  font-family: "Andale Mono", monospace;
 }
 
 .form-control:disabled {
@@ -155,36 +167,32 @@ textarea {
   flex-direction: row;
 }
 
-main
-{
+main {
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-hr
-{
+hr {
   width: 100%;
 }
-.fill
-{
+
+.fill {
   /*flex-grow: 1;*/
   height: 85%;
   margin-bottom: 10px;
 }
 
-.clear-btn
-{
+.clear-btn {
   height: calc(2.25rem + 2px);
 }
 
-.modal-lg
-{
+.modal-lg {
   max-width: 80%;
 }
 
-.options-btn{
+.options-btn {
   color: #cacaca;
   border-color: #cacaca;
   background-color: #292b2c;
@@ -192,8 +200,7 @@ hr
 
 .options-btn:hover,
 .options-btn:focus,
-.options-btn.active
-{
+.options-btn.active {
   outline: none !important;
   box-shadow: none;
   color: #000000;
@@ -201,8 +208,25 @@ hr
   border-color: #cacaca;
 }
 
-.supsub {position: absolute}
-.subscript {display:block; position:relative; left:5px; top: 23px}
-.superscript {display:block; position:relative; left:5px; top: 7px}
+.supsub {
+  position: absolute
+}
 
-textarea[disabled="disabled"], textarea[disabled] { background-color:white !important;   }
+.subscript {
+  display: block;
+  position: relative;
+  left: 5px;
+  top: 23px
+}
+
+.superscript {
+  display: block;
+  position: relative;
+  left: 5px;
+  top: 7px
+}
+
+textarea[disabled="disabled"],
+textarea[disabled] {
+  background-color: white !important;
+}
