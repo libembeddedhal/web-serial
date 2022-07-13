@@ -191,7 +191,7 @@ document.querySelector("#serial-input").addEventListener("keyup", event => {
   }
 });
 
-document.querySelector("#serial-send").addEventListener("click", () => {
+document.querySelector("#serial-send").addEventListener("click", async () => {
   let payload = $("#serial-input").val();
   $("#serial-input").val("");
 
@@ -205,6 +205,11 @@ document.querySelector("#serial-send").addEventListener("click", () => {
   let nl = flags.get("newline-select") ? "\n" : "";
 
   console.log(`${payload}${cr}${nl}\n\n\n`);
+
+  const encoder = new TextEncoder();
+  const writer = port.writable.getWriter();
+  await writer.write(encoder.encode(`${payload}${cr}${nl}`));
+  writer.releaseLock();
 });
 
 //Clear Button Code
@@ -245,10 +250,12 @@ document.querySelector("#serial-upload").addEventListener("click", () => {
   let reader = new FileReader();
 
   // This event listener will be fired once reader.readAsText() finishes
-  reader.onload = () => {
-    // TODO: Use web serial here
-    // Array.from(reader.result)
+  reader.onload = async () => {
+    const writer = port.writable.getWriter();
+    await writer.write(reader.result);
+    writer.releaseLock();
   };
+
   // Initiate reading of uploaded file
   reader.readAsArrayBuffer(file);
 });
@@ -281,7 +288,6 @@ function commandHistoryUpdateHandler(command_list) {
 }
 
 flags.attach("baudrate", "change", "38400");
-flags.attach("reset-on-connect", "change");
 flags.attach("carriage-return-select", "change");
 flags.attach("newline-select", "change", true);
 flags.attach("dark-theme", "change", false, ApplyDarkTheme, ApplyDarkTheme);
